@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/SpringArmComponent.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "ControlCharacter.generated.h"
@@ -19,6 +20,10 @@ public:
 	AControlCharacter();
 
 protected:
+	// A spring arm acts as a virtual camera boom, smoothing 3rd person camera movement
+	UPROPERTY(VisibleAnywhere, Category=Camera)
+	USpringArmComponent* CameraBoom;
+
 	UPROPERTY(VisibleAnywhere, Category=Camera)
 	UCameraComponent* Camera;
 
@@ -34,6 +39,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category=Input)
 	TSoftObjectPtr<UInputAction> WalkAction;
 
+	UPROPERTY(EditDefaultsOnly, Category=Input)
+	TSoftObjectPtr<UInputAction> JumpAction;
+	
+	UPROPERTY(EditDefaultsOnly, Category=Input)
+	TSoftObjectPtr<UInputAction> FlyAction;
+
 private:
 	// Controls camera movement
 	UFUNCTION()
@@ -42,6 +53,9 @@ private:
 	// Controls player movement when in walking mode
 	UFUNCTION()
 	void Walk(const FInputActionValue& WalkValue);
+
+	UFUNCTION()
+	void Fly();
 
 protected:
 	// Called when the game starts or when spawned
