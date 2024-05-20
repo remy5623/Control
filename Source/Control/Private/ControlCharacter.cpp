@@ -13,7 +13,7 @@ AControlCharacter::AControlCharacter()
 	PrimaryActorTick.bCanEverTick = true;
 
 	bUseControllerRotationYaw = false;	// In 3rd person, only camera should get controller rotation
-	JumpMaxHoldTime = 2.f;
+	JumpMaxHoldTime = 0.5f;	// Holding the jump button for up to half a second increases the height of the jump
 	
 	// Character movement component settings
 	GetCharacterMovement()->bUseSeparateBrakingFriction = true;	// Slow the character automatically when not receiving input, simulating friction
@@ -76,12 +76,12 @@ void AControlCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 
 		if (JumpAction)
 		{
-			EnhancedInputComponent->BindAction(JumpAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &ACharacter::Jump);
+			EnhancedInputComponent->BindAction(JumpAction.LoadSynchronous(), ETriggerEvent::Started, this, &ACharacter::Jump);
 			EnhancedInputComponent->BindAction(JumpAction.LoadSynchronous(), ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 		}
 
 		if (FlyAction)
-			EnhancedInputComponent->BindAction(JumpAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::Fly);
+			EnhancedInputComponent->BindAction(FlyAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::Fly);
 	}
 }
 
@@ -130,5 +130,6 @@ void AControlCharacter::Walk(const FInputActionValue& WalkValue)
 
 void AControlCharacter::Fly()
 {
-
+	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Flying);
+	GetCharacterMovement()->GravityScale = 0.f;
 }
