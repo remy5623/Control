@@ -55,7 +55,10 @@ private:
 	void Walk(const FInputActionValue& WalkValue);
 
 	UFUNCTION()
-	void Fly();
+	void StartFlying();
+
+	UFUNCTION()
+	void StopFlying();
 
 protected:
 	// Called when the game starts or when spawned

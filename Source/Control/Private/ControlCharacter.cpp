@@ -35,14 +35,12 @@ AControlCharacter::AControlCharacter()
 void AControlCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	
 }
 
 // Called every frame
 void AControlCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
 }
 
 /** Called to bind functionality to input
@@ -81,7 +79,7 @@ void AControlCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 		}
 
 		if (FlyAction)
-			EnhancedInputComponent->BindAction(FlyAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::Fly);
+			EnhancedInputComponent->BindAction(FlyAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::StartFlying);
 	}
 }
 
@@ -128,8 +126,13 @@ void AControlCharacter::Walk(const FInputActionValue& WalkValue)
 	}
 }
 
-void AControlCharacter::Fly()
+void AControlCharacter::StartFlying()
 {
 	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Flying);
 	GetCharacterMovement()->GravityScale = 0.f;
+}
+
+void AControlCharacter::StopFlying()
+{
+
 }
