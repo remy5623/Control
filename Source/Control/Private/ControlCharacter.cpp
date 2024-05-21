@@ -1,9 +1,7 @@
 // Rémy Pijuan 2024.
 
-
 #include "ControlCharacter.h"
 #include "EnhancedInputComponent.h"
-#include "EnhancedInputSubsystems.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
 // Sets default values
@@ -50,18 +48,21 @@ void AControlCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-	// Get the enhanced input system for the local player from the player controller
+	// Set the enhanced input system for the local player from the player controller
 	// Add the default mapping context (walking)
 	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
 	{
 		if (ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer())
 		{
-			if (UEnhancedInputLocalPlayerSubsystem* EnhancedInputSystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+			EnhancedInputSystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
+			
+			if(EnhancedInputSystem && !WalkingMap.IsNull())
 			{
 				EnhancedInputSystem->AddMappingContext(WalkingMap.LoadSynchronous(), 0);
 			}
 		}
 	}
+
 
 	// Bind actions for the walking mapping context
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
@@ -78,8 +79,11 @@ void AControlCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 			EnhancedInputComponent->BindAction(JumpAction.LoadSynchronous(), ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 		}
 
-		if (FlyAction)
-			EnhancedInputComponent->BindAction(FlyAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::StartFlying);
+		if (StartFlyingAction)
+			EnhancedInputComponent->BindAction(StartFlyingAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::StartFlying);
+
+		if (FlyingMovementAction)
+			EnhancedInputComponent->BindAction(FlyingMovementAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::FlyingMovement);
 	}
 }
 
@@ -130,9 +134,38 @@ void AControlCharacter::StartFlying()
 {
 	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Flying);
 	GetCharacterMovement()->GravityScale = 0.f;
+	GetCharacterMovement()->RotationRate = FRotator(0.f, 720.f, 0.f);
+
+	if (EnhancedInputSystem && !FlyingMap.IsNull())
+		EnhancedInputSystem->AddMappingContext(FlyingMap.LoadSynchronous(), 1);
+}
+
+void AControlCharacter::FlyingMovement(const FInputActionValue& FlyValue)
+{
+	// Convert input to a Vector2D
+	FVector2D WalkingVector = FlyValue.Get<FVector2D>();
+
+	if (Controller != nullptr)
+	{
+		// find out which way is forward
+		const FRotator Rotation = Controller->GetControlRotation();
+		const FRotator YawRotation(0, Rotation.Yaw, 0);
+
+		// get forward vector
+		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+
+		// get right vector 
+		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+
+		// add movement 
+		AddMovementInput(ForwardDirection, WalkingVector.Y);
+		//AddMovementInput(RightDirection, WalkingVector.X);
+	}
 }
 
 void AControlCharacter::StopFlying()
 {
-
+	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Walking);
+	GetCharacterMovement()->GravityScale = 1.f;
+	GetCharacterMovement()->RotationRate = FRotator(0.f, 360.f, 0.f);
 }

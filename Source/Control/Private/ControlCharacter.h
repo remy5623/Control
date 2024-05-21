@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Camera/CameraComponent.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "InputAction.h"
@@ -19,6 +21,9 @@ public:
 	// Sets default values for this character's properties
 	AControlCharacter();
 
+private:
+	UEnhancedInputLocalPlayerSubsystem* EnhancedInputSystem;
+
 protected:
 	// A spring arm acts as a virtual camera boom, smoothing 3rd person camera movement
 	UPROPERTY(VisibleAnywhere, Category=Camera)
@@ -31,6 +36,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category=Input)
 	TSoftObjectPtr<UInputMappingContext> WalkingMap;
 
+	// The mapping context for flying movement
+	UPROPERTY(EditDefaultsOnly, Category=Input)
+	TSoftObjectPtr<UInputMappingContext> FlyingMap;
+
 	// The input action for camera movement
 	UPROPERTY(EditDefaultsOnly, Category=Input)
 	TSoftObjectPtr<UInputAction> LookAction;
@@ -39,11 +48,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category=Input)
 	TSoftObjectPtr<UInputAction> WalkAction;
 
+	// The input action for jumping
 	UPROPERTY(EditDefaultsOnly, Category=Input)
 	TSoftObjectPtr<UInputAction> JumpAction;
 	
+	// The input action to start flying (from walking)
 	UPROPERTY(EditDefaultsOnly, Category=Input)
-	TSoftObjectPtr<UInputAction> FlyAction;
+	TSoftObjectPtr<UInputAction> StartFlyingAction;
+
+	// The input action for flying movement
+	UPROPERTY(EditDefaultsOnly, Category=Input)
+	TSoftObjectPtr<UInputAction> FlyingMovementAction;
 
 private:
 	// Controls camera movement
@@ -56,6 +71,9 @@ private:
 
 	UFUNCTION()
 	void StartFlying();
+	
+	UFUNCTION()
+	void FlyingMovement(const FInputActionValue& FlyValue);
 
 	UFUNCTION()
 	void StopFlying();
