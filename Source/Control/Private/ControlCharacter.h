@@ -45,34 +45,50 @@ protected:
 	/** Input Variables */
 
 	// The mapping context for walking movement
-	UPROPERTY(EditDefaultsOnly, Category=Input)
+	UPROPERTY(EditDefaultsOnly, Category="Input|Maps")
 	TSoftObjectPtr<UInputMappingContext> WalkingMap;
 
 	// The mapping context for flying movement
-	UPROPERTY(EditDefaultsOnly, Category=Input)
-	TSoftObjectPtr<UInputMappingContext> FlyingMap;
+	UPROPERTY(EditDefaultsOnly, Category="Input|Maps")
+	UInputMappingContext* FlyingMap;
+
+	// The input action for quitting the game
+	UPROPERTY(EditDefaultsOnly, Category="Input|Settings")
+	TSoftObjectPtr<UInputAction> QuitAction;
 
 	// The input action for camera movement
-	UPROPERTY(EditDefaultsOnly, Category=Input)
+	UPROPERTY(EditDefaultsOnly, Category="Input|Camera")
 	TSoftObjectPtr<UInputAction> LookAction;
 
 	// The input action for walking movement
-	UPROPERTY(EditDefaultsOnly, Category=Input)
+	UPROPERTY(EditDefaultsOnly, Category="Input|Walk")
 	TSoftObjectPtr<UInputAction> WalkAction;
 
 	// The input action for jumping
-	UPROPERTY(EditDefaultsOnly, Category=Input)
+	UPROPERTY(EditDefaultsOnly, Category="Input|Walk")
 	TSoftObjectPtr<UInputAction> JumpAction;
 	
 	// The input action to start flying (from walking)
-	UPROPERTY(EditDefaultsOnly, Category=Input)
+	UPROPERTY(EditDefaultsOnly, Category="Input|Flight")
 	TSoftObjectPtr<UInputAction> StartFlyingAction;
 
 	// The input action for flying movement
-	UPROPERTY(EditDefaultsOnly, Category=Input)
+	UPROPERTY(EditDefaultsOnly, Category="Input|Flight")
 	TSoftObjectPtr<UInputAction> FlyingMovementAction;
 
+	UPROPERTY(EditDefaultsonly, Category="Input|Flight")
+	TSoftObjectPtr<UInputAction> UpwardThrustAction;
+
+	UPROPERTY(EditDefaultsOnly, Category="Input|Flight")
+	TSoftObjectPtr<UInputAction> DownwardThrustAction;
+
 private:
+	/** Settings Functions */
+
+	// Quit the game
+	void QuitToDesktop();
+
+
 	/** Movement Functions */
 
 	// Controls camera movement
@@ -90,6 +106,12 @@ private:
 	
 	UFUNCTION()
 	void FlyingMovement(const FInputActionValue& FlyValue);
+
+	UFUNCTION()
+	void AddUpwardThrust();
+
+	UFUNCTION()
+	void AddDownwardThrust();
 
 	UFUNCTION()
 	void Land(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,

@@ -69,9 +69,14 @@ void AControlCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 	}
 
 
-	// Bind actions for the walking mapping context
+	// Bind all actions
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
+		if (QuitAction)
+		{
+			EnhancedInputComponent->BindAction(QuitAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::QuitToDesktop);
+		}
+
 		if (LookAction)
 			EnhancedInputComponent->BindAction(LookAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::Look);
 
@@ -89,7 +94,18 @@ void AControlCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 
 		if (FlyingMovementAction)
 			EnhancedInputComponent->BindAction(FlyingMovementAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::FlyingMovement);
+
+		if (UpwardThrustAction)
+			EnhancedInputComponent->BindAction(UpwardThrustAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::AddUpwardThrust);
+
+		if (DownwardThrustAction)
+			EnhancedInputComponent->BindAction(DownwardThrustAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::AddDownwardThrust);
 	}
+}
+
+void AControlCharacter::QuitToDesktop()
+{
+	FGenericPlatformMisc::RequestExit(false);
 }
 
 /** Apply input from the x-axis to the camera's yaw
@@ -146,12 +162,13 @@ void AControlCharacter::StartFlying()
 	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Flying);
 	GetCharacterMovement()->GravityScale = 0.f;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 720.f, 0.f);
+	//GetCharacterMovement()->BrakingFriction = 2.f;
 
 	CameraBoom->bEnableCameraLag = false;
 	CameraBoom->bEnableCameraRotationLag = false;
 
-	if (EnhancedInputSystem && !FlyingMap.IsNull())
-		EnhancedInputSystem->AddMappingContext(FlyingMap.LoadSynchronous(), 1);
+	if (EnhancedInputSystem)
+		EnhancedInputSystem->AddMappingContext(FlyingMap, 1);
 }
 
 void AControlCharacter::FlyingMovement(const FInputActionValue& FlyValue)
@@ -169,11 +186,30 @@ void AControlCharacter::FlyingMovement(const FInputActionValue& FlyValue)
 		const FVector ForwardDirection = Camera->GetForwardVector();
 
 		// get right vector 
-		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+		const FVector RightDirection = Camera->GetRightVector();
 
 		// add movement 
 		AddMovementInput(ForwardDirection, WalkingVector.Y);
 		AddMovementInput(RightDirection, WalkingVector.X);
+	}
+}
+
+void AControlCharacter::AddUpwardThrust()
+{
+	if (Controller != nullptr)
+	{
+		// add movement 
+		AddMovementInput(FVector::UpVector, 1);
+	}
+
+}
+
+void AControlCharacter::AddDownwardThrust()
+{
+	if (Controller != nullptr)
+	{
+		// add movement 
+		AddMovementInput(FVector::DownVector, 1);
 	}
 }
 
@@ -182,6 +218,7 @@ void AControlCharacter::Land(UPrimitiveComponent* OverlappedComp, AActor* OtherA
 {
 	if (OtherActor->CanBeBaseForCharacter(this))
 	{
+		SetActorRotation(FQuat::MakeFromEuler(FVector(0, 0, GetActorRotation().Yaw)));
 		StopFlying();
 	}
 }
@@ -193,10 +230,17 @@ void AControlCharacter::StopFlying()
 
 	bUseControllerRotationPitch = false;
 
+	GetCharacterMovement()->Velocity = FVector::ZeroVector;
 	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Walking);
 	GetCharacterMovement()->GravityScale = 1.f;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 360.f, 0.f);
+	//GetCharacterMovement()->BrakingFriction = 0.f;
 
 	CameraBoom->bEnableCameraLag = true;
 	CameraBoom->bEnableCameraRotationLag = true;
+
+	if (EnhancedInputSystem)
+	{
+		EnhancedInputSystem->RemoveMappingContext(FlyingMap);
+	}
 }
