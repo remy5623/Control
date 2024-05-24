@@ -1,4 +1,4 @@
-// Rémy Pijuan 2024.
+// Remy Pijuan 2024.
 
 #include "ControlCharacter.h"
 #include "EnhancedInputComponent.h"
@@ -16,6 +16,7 @@ AControlCharacter::AControlCharacter()
 	// Character movement component settings
 	GetCharacterMovement()->bUseSeparateBrakingFriction = true;	// Slow the character automatically when not receiving input, simulating friction
 	GetCharacterMovement()->bOrientRotationToMovement = true;	// Turns the player mesh to face whichever way the character is moving
+	GetCharacterMovement()->MaxFlySpeed = 2400.f;
 
 	// Setup camera boom
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
@@ -27,6 +28,10 @@ AControlCharacter::AControlCharacter()
 	// Setup camera
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
+
+	// Setup the collider for landings
+	GroundSurfaceDetector = CreateDefaultSubobject<UBoxComponent>(TEXT("SurfaceDetector"));
+	GroundSurfaceDetector->SetupAttachment(RootComponent);
 }
 
 // Called when the game starts or when spawned
@@ -132,9 +137,18 @@ void AControlCharacter::Walk(const FInputActionValue& WalkValue)
 
 void AControlCharacter::StartFlying()
 {
+	// Enable landing detection
+	GroundSurfaceDetector->OnComponentBeginOverlap.AddDynamic(this, &AControlCharacter::Land);
+
+	StopJumping();
+	bUseControllerRotationPitch = true;
+
 	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Flying);
 	GetCharacterMovement()->GravityScale = 0.f;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 720.f, 0.f);
+
+	CameraBoom->bEnableCameraLag = false;
+	CameraBoom->bEnableCameraRotationLag = false;
 
 	if (EnhancedInputSystem && !FlyingMap.IsNull())
 		EnhancedInputSystem->AddMappingContext(FlyingMap.LoadSynchronous(), 1);
@@ -152,20 +166,37 @@ void AControlCharacter::FlyingMovement(const FInputActionValue& FlyValue)
 		const FRotator YawRotation(0, Rotation.Yaw, 0);
 
 		// get forward vector
-		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+		const FVector ForwardDirection = Camera->GetForwardVector();
 
 		// get right vector 
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
 		// add movement 
 		AddMovementInput(ForwardDirection, WalkingVector.Y);
-		//AddMovementInput(RightDirection, WalkingVector.X);
+		AddMovementInput(RightDirection, WalkingVector.X);
+	}
+}
+
+void AControlCharacter::Land(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
+	int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (OtherActor->CanBeBaseForCharacter(this))
+	{
+		StopFlying();
 	}
 }
 
 void AControlCharacter::StopFlying()
 {
+	// Disable landing detection
+	GroundSurfaceDetector->OnComponentBeginOverlap.RemoveDynamic(this, &AControlCharacter::Land);
+
+	bUseControllerRotationPitch = false;
+
 	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Walking);
 	GetCharacterMovement()->GravityScale = 1.f;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 360.f, 0.f);
+
+	CameraBoom->bEnableCameraLag = true;
+	CameraBoom->bEnableCameraRotationLag = true;
 }

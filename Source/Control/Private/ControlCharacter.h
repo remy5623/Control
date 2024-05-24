@@ -1,9 +1,10 @@
-// Rémy Pijuan 2024.
+// Remy Pijuan 2024.
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Camera/CameraComponent.h"
+#include "Components/BoxComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "GameFramework/Character.h"
@@ -25,12 +26,23 @@ private:
 	UEnhancedInputLocalPlayerSubsystem* EnhancedInputSystem;
 
 protected:
+	/** Camera Components */
+
 	// A spring arm acts as a virtual camera boom, smoothing 3rd person camera movement
 	UPROPERTY(VisibleAnywhere, Category=Camera)
 	USpringArmComponent* CameraBoom;
 
 	UPROPERTY(VisibleAnywhere, Category=Camera)
 	UCameraComponent* Camera;
+
+	
+	/** Flight Components */
+	// A volume to detect when there is a surface below to land on.
+	UPROPERTY(VisibleAnywhere, Category=Flight)
+	UBoxComponent* GroundSurfaceDetector;
+
+
+	/** Input Variables */
 
 	// The mapping context for walking movement
 	UPROPERTY(EditDefaultsOnly, Category=Input)
@@ -61,6 +73,8 @@ protected:
 	TSoftObjectPtr<UInputAction> FlyingMovementAction;
 
 private:
+	/** Movement Functions */
+
 	// Controls camera movement
 	UFUNCTION()
 	void Look(const FInputActionValue& LookValue);
@@ -69,11 +83,17 @@ private:
 	UFUNCTION()
 	void Walk(const FInputActionValue& WalkValue);
 
+
+	/** Flying Functions */
 	UFUNCTION()
 	void StartFlying();
 	
 	UFUNCTION()
 	void FlyingMovement(const FInputActionValue& FlyValue);
+
+	UFUNCTION()
+	void Land(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
+		int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
 	UFUNCTION()
 	void StopFlying();
