@@ -165,7 +165,7 @@ void AControlCharacter::StartFlying()
 	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Flying);
 	GetCharacterMovement()->GravityScale = 0.f;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 720.f, 0.f);
-	GetCharacterMovement()->BrakingFriction = 2.f;
+	GetCharacterMovement()->BrakingFriction = 4.f;
 
 	CameraBoom->bEnableCameraLag = false;
 	CameraBoom->bEnableCameraRotationLag = false;
@@ -248,5 +248,10 @@ void AControlCharacter::StopFlying()
 void AControlCharacter::ApplyBoost(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
 	int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	GetCharacterMovement()->Velocity += Camera->GetForwardVector() * 50000.f;
+	FVector CharLocationRelativeToBoostRing = (OtherActor->GetActorLocation() - GetActorLocation()) - OtherActor->GetActorForwardVector();
+
+	if (CharLocationRelativeToBoostRing.X > 0)
+		GetCharacterMovement()->Velocity += OtherActor->GetActorForwardVector() * 50000.f;
+	else
+		GetCharacterMovement()->Velocity -= OtherActor->GetActorForwardVector() * 50000.f;
 }
