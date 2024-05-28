@@ -1,9 +1,7 @@
-// Rémy Pijuan 2024.
-
+// Remy Pijuan 2024.
 
 #include "ControlCharacter.h"
 #include "EnhancedInputComponent.h"
-#include "EnhancedInputSubsystems.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
 // Sets default values
@@ -13,11 +11,12 @@ AControlCharacter::AControlCharacter()
 	PrimaryActorTick.bCanEverTick = true;
 
 	bUseControllerRotationYaw = false;	// In 3rd person, only camera should get controller rotation
-	JumpMaxHoldTime = 2.f;
+	JumpMaxHoldTime = 0.5f;	// Holding the jump button for up to half a second increases the height of the jump
 	
 	// Character movement component settings
 	GetCharacterMovement()->bUseSeparateBrakingFriction = true;	// Slow the character automatically when not receiving input, simulating friction
 	GetCharacterMovement()->bOrientRotationToMovement = true;	// Turns the player mesh to face whichever way the character is moving
+	GetCharacterMovement()->MaxFlySpeed = 2400.f;
 
 	// Setup camera boom
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
@@ -29,20 +28,22 @@ AControlCharacter::AControlCharacter()
 	// Setup camera
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
+
+	// Setup the collider for landings
+	GroundSurfaceDetector = CreateDefaultSubobject<UBoxComponent>(TEXT("SurfaceDetector"));
+	GroundSurfaceDetector->SetupAttachment(RootComponent);
 }
 
 // Called when the game starts or when spawned
 void AControlCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	
 }
 
 // Called every frame
 void AControlCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
 }
 
 /** Called to bind functionality to input
@@ -52,22 +53,30 @@ void AControlCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-	// Get the enhanced input system for the local player from the player controller
+	// Set the enhanced input system for the local player from the player controller
 	// Add the default mapping context (walking)
 	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
 	{
 		if (ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer())
 		{
-			if (UEnhancedInputLocalPlayerSubsystem* EnhancedInputSystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+			EnhancedInputSystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
+			
+			if(EnhancedInputSystem && !WalkingMap.IsNull())
 			{
 				EnhancedInputSystem->AddMappingContext(WalkingMap.LoadSynchronous(), 0);
 			}
 		}
 	}
 
-	// Bind actions for the walking mapping context
+
+	// Bind all actions
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
+		if (QuitAction)
+		{
+			EnhancedInputComponent->BindAction(QuitAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::QuitToDesktop);
+		}
+
 		if (LookAction)
 			EnhancedInputComponent->BindAction(LookAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::Look);
 
@@ -76,13 +85,27 @@ void AControlCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 
 		if (JumpAction)
 		{
-			EnhancedInputComponent->BindAction(JumpAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &ACharacter::Jump);
+			EnhancedInputComponent->BindAction(JumpAction.LoadSynchronous(), ETriggerEvent::Started, this, &ACharacter::Jump);
 			EnhancedInputComponent->BindAction(JumpAction.LoadSynchronous(), ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 		}
 
-		if (FlyAction)
-			EnhancedInputComponent->BindAction(JumpAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::Fly);
+		if (StartFlyingAction)
+			EnhancedInputComponent->BindAction(StartFlyingAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::StartFlying);
+
+		if (FlyingMovementAction)
+			EnhancedInputComponent->BindAction(FlyingMovementAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::FlyingMovement);
+
+		if (UpwardThrustAction)
+			EnhancedInputComponent->BindAction(UpwardThrustAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::AddUpwardThrust);
+
+		if (DownwardThrustAction)
+			EnhancedInputComponent->BindAction(DownwardThrustAction.LoadSynchronous(), ETriggerEvent::Triggered, this, &AControlCharacter::AddDownwardThrust);
 	}
+}
+
+void AControlCharacter::QuitToDesktop()
+{
+	FGenericPlatformMisc::RequestExit(false);
 }
 
 /** Apply input from the x-axis to the camera's yaw
@@ -128,7 +151,96 @@ void AControlCharacter::Walk(const FInputActionValue& WalkValue)
 	}
 }
 
-void AControlCharacter::Fly()
+void AControlCharacter::StartFlying()
 {
+	// Enable landing detection
+	GroundSurfaceDetector->OnComponentBeginOverlap.AddDynamic(this, &AControlCharacter::Land);
 
+	StopJumping();
+	bUseControllerRotationPitch = true;
+
+	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Flying);
+	GetCharacterMovement()->GravityScale = 0.f;
+	GetCharacterMovement()->RotationRate = FRotator(0.f, 720.f, 0.f);
+	//GetCharacterMovement()->BrakingFriction = 2.f;
+
+	CameraBoom->bEnableCameraLag = false;
+	CameraBoom->bEnableCameraRotationLag = false;
+
+	if (EnhancedInputSystem)
+		EnhancedInputSystem->AddMappingContext(FlyingMap, 1);
+}
+
+void AControlCharacter::FlyingMovement(const FInputActionValue& FlyValue)
+{
+	// Convert input to a Vector2D
+	FVector2D WalkingVector = FlyValue.Get<FVector2D>();
+
+	if (Controller != nullptr)
+	{
+		// find out which way is forward
+		const FRotator Rotation = Controller->GetControlRotation();
+		const FRotator YawRotation(0, Rotation.Yaw, 0);
+
+		// get forward vector
+		const FVector ForwardDirection = Camera->GetForwardVector();
+
+		// get right vector 
+		const FVector RightDirection = Camera->GetRightVector();
+
+		// add movement 
+		AddMovementInput(ForwardDirection, WalkingVector.Y);
+		AddMovementInput(RightDirection, WalkingVector.X);
+	}
+}
+
+void AControlCharacter::AddUpwardThrust()
+{
+	if (Controller != nullptr)
+	{
+		// add movement 
+		AddMovementInput(FVector::UpVector, 1);
+	}
+
+}
+
+void AControlCharacter::AddDownwardThrust()
+{
+	if (Controller != nullptr)
+	{
+		// add movement 
+		AddMovementInput(FVector::DownVector, 1);
+	}
+}
+
+void AControlCharacter::Land(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
+	int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (OtherActor->CanBeBaseForCharacter(this))
+	{
+		SetActorRotation(FQuat::MakeFromEuler(FVector(0, 0, GetActorRotation().Yaw)));
+		StopFlying();
+	}
+}
+
+void AControlCharacter::StopFlying()
+{
+	// Disable landing detection
+	GroundSurfaceDetector->OnComponentBeginOverlap.RemoveDynamic(this, &AControlCharacter::Land);
+
+	bUseControllerRotationPitch = false;
+
+	GetCharacterMovement()->Velocity = FVector::ZeroVector;
+	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Walking);
+	GetCharacterMovement()->GravityScale = 1.f;
+	GetCharacterMovement()->RotationRate = FRotator(0.f, 360.f, 0.f);
+	//GetCharacterMovement()->BrakingFriction = 0.f;
+
+	CameraBoom->bEnableCameraLag = true;
+	CameraBoom->bEnableCameraRotationLag = true;
+
+	if (EnhancedInputSystem)
+	{
+		EnhancedInputSystem->RemoveMappingContext(FlyingMap);
+	}
 }
