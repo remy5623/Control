@@ -1,6 +1,7 @@
 // Remy Pijuan 2024.
 
 #include "ControlCharacter.h"
+#include "Components/CapsuleComponent.h"
 #include "EnhancedInputComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
@@ -17,6 +18,7 @@ AControlCharacter::AControlCharacter()
 	GetCharacterMovement()->bUseSeparateBrakingFriction = true;	// Slow the character automatically when not receiving input, simulating friction
 	GetCharacterMovement()->bOrientRotationToMovement = true;	// Turns the player mesh to face whichever way the character is moving
 	GetCharacterMovement()->MaxFlySpeed = 2400.f;
+	GetCharacterMovement()->BrakingDecelerationFlying = 2.f;
 
 	// Setup camera boom
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
@@ -153,16 +155,17 @@ void AControlCharacter::Walk(const FInputActionValue& WalkValue)
 
 void AControlCharacter::StartFlying()
 {
-	// Enable landing detection
-	GroundSurfaceDetector->OnComponentBeginOverlap.AddDynamic(this, &AControlCharacter::Land);
+	GetCapsuleComponent()->OnComponentBeginOverlap.AddDynamic(this, &AControlCharacter::ApplyBoost);	// Enable boosting
+	GroundSurfaceDetector->OnComponentBeginOverlap.AddDynamic(this, &AControlCharacter::Land);			// Enable landing detection
 
 	StopJumping();
 	bUseControllerRotationPitch = true;
+	bUseControllerRotationYaw = true;
 
 	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Flying);
 	GetCharacterMovement()->GravityScale = 0.f;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 720.f, 0.f);
-	//GetCharacterMovement()->BrakingFriction = 2.f;
+	GetCharacterMovement()->BrakingFriction = 4.f;
 
 	CameraBoom->bEnableCameraLag = false;
 	CameraBoom->bEnableCameraRotationLag = false;
@@ -174,14 +177,10 @@ void AControlCharacter::StartFlying()
 void AControlCharacter::FlyingMovement(const FInputActionValue& FlyValue)
 {
 	// Convert input to a Vector2D
-	FVector2D WalkingVector = FlyValue.Get<FVector2D>();
+	FVector2D FlyingVector = FlyValue.Get<FVector2D>();
 
 	if (Controller != nullptr)
 	{
-		// find out which way is forward
-		const FRotator Rotation = Controller->GetControlRotation();
-		const FRotator YawRotation(0, Rotation.Yaw, 0);
-
 		// get forward vector
 		const FVector ForwardDirection = Camera->GetForwardVector();
 
@@ -189,8 +188,8 @@ void AControlCharacter::FlyingMovement(const FInputActionValue& FlyValue)
 		const FVector RightDirection = Camera->GetRightVector();
 
 		// add movement 
-		AddMovementInput(ForwardDirection, WalkingVector.Y);
-		AddMovementInput(RightDirection, WalkingVector.X);
+		AddMovementInput(ForwardDirection, FlyingVector.Y);
+		AddMovementInput(RightDirection, FlyingVector.X);
 	}
 }
 
@@ -199,7 +198,7 @@ void AControlCharacter::AddUpwardThrust()
 	if (Controller != nullptr)
 	{
 		// add movement 
-		AddMovementInput(FVector::UpVector, 1);
+		AddMovementInput(FVector::UpVector);
 	}
 
 }
@@ -209,7 +208,7 @@ void AControlCharacter::AddDownwardThrust()
 	if (Controller != nullptr)
 	{
 		// add movement 
-		AddMovementInput(FVector::DownVector, 1);
+		AddMovementInput(FVector::DownVector);
 	}
 }
 
@@ -225,16 +224,17 @@ void AControlCharacter::Land(UPrimitiveComponent* OverlappedComp, AActor* OtherA
 
 void AControlCharacter::StopFlying()
 {
-	// Disable landing detection
-	GroundSurfaceDetector->OnComponentBeginOverlap.RemoveDynamic(this, &AControlCharacter::Land);
+	GetCapsuleComponent()->OnComponentBeginOverlap.RemoveDynamic(this, &AControlCharacter::ApplyBoost);	// Disable boosting
+	GroundSurfaceDetector->OnComponentBeginOverlap.RemoveDynamic(this, &AControlCharacter::Land);	// Disable landing detection
 
 	bUseControllerRotationPitch = false;
+	bUseControllerRotationYaw = true;
 
 	GetCharacterMovement()->Velocity = FVector::ZeroVector;
 	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Walking);
 	GetCharacterMovement()->GravityScale = 1.f;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 360.f, 0.f);
-	//GetCharacterMovement()->BrakingFriction = 0.f;
+	GetCharacterMovement()->BrakingFriction = 0.f;
 
 	CameraBoom->bEnableCameraLag = true;
 	CameraBoom->bEnableCameraRotationLag = true;
@@ -243,4 +243,15 @@ void AControlCharacter::StopFlying()
 	{
 		EnhancedInputSystem->RemoveMappingContext(FlyingMap);
 	}
+}
+
+void AControlCharacter::ApplyBoost(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
+	int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	FVector CharLocationRelativeToBoostRing = (OtherActor->GetActorLocation() - GetActorLocation()) - OtherActor->GetActorForwardVector();
+
+	if (CharLocationRelativeToBoostRing.X > 0)
+		GetCharacterMovement()->Velocity += OtherActor->GetActorForwardVector() * 50000.f;
+	else
+		GetCharacterMovement()->Velocity -= OtherActor->GetActorForwardVector() * 50000.f;
 }
