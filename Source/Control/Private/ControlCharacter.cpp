@@ -4,6 +4,7 @@
 #include "Components/CapsuleComponent.h"
 #include "EnhancedInputComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GravityControlMovementComponent.h"
 
 // Sets default values
 AControlCharacter::AControlCharacter()
@@ -13,12 +14,20 @@ AControlCharacter::AControlCharacter()
 
 	bUseControllerRotationYaw = false;	// In 3rd person, only camera should get controller rotation
 	JumpMaxHoldTime = 0.5f;	// Holding the jump button for up to half a second increases the height of the jump
+
+	GetCharacterMovement()->bAutoActivate = false;
 	
+	GravityMovement = CreateDefaultSubobject<UGravityControlMovementComponent>(TEXT("Gravity Movement"));
+	if (GravityMovement)
+	{
+		GravityMovement->UpdatedComponent = GetCapsuleComponent();
+	}
+
 	// Character movement component settings
-	GetCharacterMovement()->bUseSeparateBrakingFriction = true;	// Slow the character automatically when not receiving input, simulating friction
-	GetCharacterMovement()->bOrientRotationToMovement = true;	// Turns the player mesh to face whichever way the character is moving
-	GetCharacterMovement()->MaxFlySpeed = 2400.f;
-	GetCharacterMovement()->BrakingDecelerationFlying = 2.f;
+	GravityMovement->bUseSeparateBrakingFriction = true;	// Slow the character automatically when not receiving input, simulating friction
+	GravityMovement->bOrientRotationToMovement = true;	// Turns the player mesh to face whichever way the character is moving
+	GravityMovement->MaxFlySpeed = 2400.f;
+	GravityMovement->BrakingDecelerationFlying = 2.f;
 
 	// Setup camera boom
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
@@ -40,6 +49,39 @@ AControlCharacter::AControlCharacter()
 void AControlCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+}
+
+bool AControlCharacter::CanJumpInternal_Implementation() const
+{
+	// Ensure that the CharacterMovement state is valid
+	bool bJumpIsAllowed = GravityMovement->CanAttemptJump();
+
+	if (bJumpIsAllowed)
+	{
+		// Ensure JumpHoldTime and JumpCount are valid.
+		if (!bWasJumping || GetJumpMaxHoldTime() <= 0.0f)
+		{
+			if (JumpCurrentCount == 0 && GravityMovement->IsFalling())
+			{
+				bJumpIsAllowed = JumpCurrentCount + 1 < JumpMaxCount;
+			}
+			else
+			{
+				bJumpIsAllowed = JumpCurrentCount < JumpMaxCount;
+			}
+		}
+		else
+		{
+			// Only consider JumpKeyHoldTime as long as:
+			// A) The jump limit hasn't been met OR
+			// B) The jump limit has been met AND we were already jumping
+			const bool bJumpKeyHeld = (bPressedJump && JumpKeyHoldTime < GetJumpMaxHoldTime());
+			bJumpIsAllowed = bJumpKeyHeld &&
+				((JumpCurrentCount < JumpMaxCount) || (bWasJumping && JumpCurrentCount == JumpMaxCount));
+		}
+	}
+
+	return !bIsCrouched && bJumpIsAllowed;
 }
 
 // Called every frame
@@ -105,6 +147,71 @@ void AControlCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 	}
 }
 
+void AControlCharacter::ResetJumpState()
+{
+	bPressedJump = false;
+	bWasJumping = false;
+	JumpKeyHoldTime = 0.0f;
+	JumpForceTimeRemaining = 0.0f;
+
+	if (GravityMovement && !GravityMovement->IsFalling())
+	{
+		JumpCurrentCount = 0;
+		JumpCurrentCountPreJump = 0;
+	}
+}
+
+void AControlCharacter::PostInitializeComponents()
+{
+	QUICK_SCOPE_CYCLE_COUNTER(STAT_Character_PostInitComponents);
+
+	Super::PostInitializeComponents();
+
+	if (IsValid(this))
+	{
+		if (GetMesh())
+		{
+			CacheInitialMeshOffset(GetMesh()->GetRelativeLocation(), GetMesh()->GetRelativeRotation());
+
+			// force animation tick after movement component updates
+			if (GetMesh()->PrimaryComponentTick.bCanEverTick&& GravityMovement)
+			{
+				GetMesh()->PrimaryComponentTick.AddPrerequisite(GravityMovement, GravityMovement->PrimaryComponentTick);
+			}
+		}
+
+		if (GravityMovement && GetCapsuleComponent())
+		{
+			GravityMovement->UpdateNavAgent(*GetCapsuleComponent());
+		}
+
+		if (Controller == nullptr && GetNetMode() != NM_Client)
+		{
+			if (GravityMovement && GravityMovement->bRunPhysicsWithNoController)
+			{
+				GravityMovement->SetDefaultMovementMode();
+			}
+		}
+	}
+}
+
+void AControlCharacter::Restart()
+{
+	Super::Restart();
+
+	JumpCurrentCount = 0;
+	JumpCurrentCountPreJump = 0;
+
+	bPressedJump = false;
+	ResetJumpState();
+	UnCrouch(true);
+
+	if (GravityMovement)
+	{
+		GravityMovement->SetDefaultMovementMode();
+	}
+}
+
 void AControlCharacter::QuitToDesktop()
 {
 	FGenericPlatformMisc::RequestExit(false);
@@ -162,10 +269,10 @@ void AControlCharacter::StartFlying()
 	bUseControllerRotationPitch = true;
 	bUseControllerRotationYaw = true;
 
-	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Flying);
-	GetCharacterMovement()->GravityScale = 0.f;
-	GetCharacterMovement()->RotationRate = FRotator(0.f, 720.f, 0.f);
-	GetCharacterMovement()->BrakingFriction = 4.f;
+	GetGravityMovement()->SetMovementMode(EMovementMode::MOVE_Flying);
+	GetGravityMovement()->GravityScale = 0.f;
+	GetGravityMovement()->RotationRate = FRotator(0.f, 720.f, 0.f);
+	GetGravityMovement()->BrakingFriction = 4.f;
 
 	CameraBoom->bEnableCameraLag = false;
 	CameraBoom->bEnableCameraRotationLag = false;
@@ -230,11 +337,11 @@ void AControlCharacter::StopFlying()
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = true;
 
-	GetCharacterMovement()->Velocity = FVector::ZeroVector;
-	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Walking);
-	GetCharacterMovement()->GravityScale = 1.f;
-	GetCharacterMovement()->RotationRate = FRotator(0.f, 360.f, 0.f);
-	GetCharacterMovement()->BrakingFriction = 0.f;
+	GetGravityMovement()->Velocity = FVector::ZeroVector;
+	GetGravityMovement()->SetMovementMode(EMovementMode::MOVE_Walking);
+	GetGravityMovement()->GravityScale = 1.f;
+	GetGravityMovement()->RotationRate = FRotator(0.f, 360.f, 0.f);
+	GetGravityMovement()->BrakingFriction = 0.f;
 
 	CameraBoom->bEnableCameraLag = true;
 	CameraBoom->bEnableCameraRotationLag = true;
@@ -251,7 +358,46 @@ void AControlCharacter::ApplyBoost(UPrimitiveComponent* OverlappedComp, AActor* 
 	FVector CharLocationRelativeToBoostRing = (OtherActor->GetActorLocation() - GetActorLocation()) - OtherActor->GetActorForwardVector();
 
 	if (CharLocationRelativeToBoostRing.X > 0)
-		GetCharacterMovement()->Velocity += OtherActor->GetActorForwardVector() * 50000.f;
+		GetGravityMovement()->Velocity += OtherActor->GetActorForwardVector() * 50000.f;
 	else
-		GetCharacterMovement()->Velocity -= OtherActor->GetActorForwardVector() * 50000.f;
+		GetGravityMovement()->Velocity -= OtherActor->GetActorForwardVector() * 50000.f;
+}
+
+void AControlCharacter::CheckJumpInput(float DeltaTime)
+{
+	JumpCurrentCountPreJump = JumpCurrentCount;
+
+	if (GravityMovement)
+	{
+		if (bPressedJump)
+		{
+			// If this is the first jump and we're already falling,
+			// then increment the JumpCount to compensate.
+			const bool bFirstJump = JumpCurrentCount == 0;
+			if (bFirstJump && GravityMovement->IsFalling())
+			{
+				JumpCurrentCount++;
+			}
+
+			const bool bDidJump = CanJump() && GravityMovement->DoJump(bClientUpdating);
+			if (bDidJump)
+			{
+				// Transition from not (actively) jumping to jumping.
+				if (!bWasJumping)
+				{
+					JumpCurrentCount++;
+					JumpForceTimeRemaining = GetJumpMaxHoldTime();
+					OnJumped();
+				}
+			}
+
+			bWasJumping = bDidJump;
+		}
+	}
+}
+
+UGravityControlMovementComponent* AControlCharacter::GetGravityMovement() const
+{
+	return 	GravityMovement;
+;
 }
