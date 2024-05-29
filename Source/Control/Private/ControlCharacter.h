@@ -9,6 +9,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "GravityControlMovementComponent.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "ControlCharacter.generated.h"
@@ -40,6 +41,11 @@ protected:
 	// A volume to detect when there is a surface below to land on.
 	UPROPERTY(VisibleAnywhere, Category=Flight)
 	UBoxComponent* GroundSurfaceDetector;
+
+	
+	/** Gravity Components */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=Movement, meta = (AllowPrivateAccess = "true"))
+	UGravityControlMovementComponent* GravityMovement;
 
 
 	/** Input Variables */
@@ -128,6 +134,11 @@ protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
+	/**
+	 * Rewritten to use GravityControlMovementComponent
+	 */
+	virtual bool CanJumpInternal_Implementation() const override;
+
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
@@ -135,4 +146,19 @@ public:
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
+	/** Marks character as not trying to jump
+	*   Overridden to replace refs to CharacterMovement with GravityMovement
+	*/
+	virtual void ResetJumpState() override;
+
+	// Overridden to replace refs to CharacterMovement with GravityMovement
+	virtual void PostInitializeComponents() override;
+	virtual void Restart() override;
+
+	/** Trigger jump if jump button has been pressed.
+	*   Overridden to use GravityControlMovementComponent instead of CharacterMovementComponent
+	*/
+	virtual void CheckJumpInput(float DeltaTime) override;
+
+	UGravityControlMovementComponent* GetGravityMovement() const;
 };
