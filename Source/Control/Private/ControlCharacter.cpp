@@ -278,7 +278,7 @@ void AControlCharacter::StartFlying()
 	CameraBoom->bEnableCameraRotationLag = false;
 
 	if (EnhancedInputSystem)
-		EnhancedInputSystem->AddMappingContext(FlyingMap, 1);
+		EnhancedInputSystem->AddMappingContext(FlyingMap.LoadSynchronous(), 1);
 }
 
 void AControlCharacter::FlyingMovement(const FInputActionValue& FlyValue)
@@ -348,7 +348,7 @@ void AControlCharacter::StopFlying()
 
 	if (EnhancedInputSystem)
 	{
-		EnhancedInputSystem->RemoveMappingContext(FlyingMap);
+		EnhancedInputSystem->RemoveMappingContext(FlyingMap.LoadSynchronous());
 	}
 }
 
