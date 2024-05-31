@@ -49,6 +49,8 @@ AControlCharacter::AControlCharacter()
 void AControlCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	RotateToGravityDirection();
 }
 
 bool AControlCharacter::CanJumpInternal_Implementation() const
@@ -278,7 +280,7 @@ void AControlCharacter::StartFlying()
 	CameraBoom->bEnableCameraRotationLag = false;
 
 	if (EnhancedInputSystem)
-		EnhancedInputSystem->AddMappingContext(FlyingMap, 1);
+		EnhancedInputSystem->AddMappingContext(FlyingMap.LoadSynchronous(), 1);
 }
 
 void AControlCharacter::FlyingMovement(const FInputActionValue& FlyValue)
@@ -348,7 +350,7 @@ void AControlCharacter::StopFlying()
 
 	if (EnhancedInputSystem)
 	{
-		EnhancedInputSystem->RemoveMappingContext(FlyingMap);
+		EnhancedInputSystem->RemoveMappingContext(FlyingMap.LoadSynchronous());
 	}
 }
 
@@ -361,6 +363,24 @@ void AControlCharacter::ApplyBoost(UPrimitiveComponent* OverlappedComp, AActor* 
 		GetGravityMovement()->Velocity += OtherActor->GetActorForwardVector() * 50000.f;
 	else
 		GetGravityMovement()->Velocity -= OtherActor->GetActorForwardVector() * 50000.f;
+}
+
+void AControlCharacter::RotateToGravityDirection()
+{
+	FVector DownVector = (GetActorUpVector() * -1).GetSafeNormal();
+	FVector GravityVector = GetGravityMovement()->GravityScaleVector.GetSafeNormal();
+
+	if (DownVector != GravityVector)
+	{
+		GetGravityMovement()->Velocity = FVector::ZeroVector;
+		SetActorRotation(FQuat::FindBetween(DownVector, GravityVector * -1).Rotator());
+	}
+}
+
+void AControlCharacter::AlterGravity(FVector NewGravityDirection)
+{
+	GetGravityMovement()->GravityScaleVector = NewGravityDirection;
+	RotateToGravityDirection();
 }
 
 void AControlCharacter::CheckJumpInput(float DeltaTime)

@@ -24,28 +24,28 @@ public:
 	AControlCharacter();
 
 private:
-	UEnhancedInputLocalPlayerSubsystem* EnhancedInputSystem;
+	TObjectPtr<UEnhancedInputLocalPlayerSubsystem> EnhancedInputSystem;
 
 protected:
 	/** Camera Components */
 
 	// A spring arm acts as a virtual camera boom, smoothing 3rd person camera movement
 	UPROPERTY(VisibleAnywhere, Category=Camera)
-	USpringArmComponent* CameraBoom;
+	TObjectPtr<USpringArmComponent> CameraBoom;
 
 	UPROPERTY(VisibleAnywhere, Category=Camera)
-	UCameraComponent* Camera;
+	TObjectPtr<UCameraComponent> Camera;
 
 	
 	/** Flight Components */
 	// A volume to detect when there is a surface below to land on.
 	UPROPERTY(VisibleAnywhere, Category=Flight)
-	UBoxComponent* GroundSurfaceDetector;
+	TObjectPtr<UBoxComponent> GroundSurfaceDetector;
 
 	
 	/** Gravity Components */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=Movement, meta = (AllowPrivateAccess = "true"))
-	UGravityControlMovementComponent* GravityMovement;
+	TObjectPtr<UGravityControlMovementComponent> GravityMovement;
 
 
 	/** Input Variables */
@@ -56,7 +56,7 @@ protected:
 
 	// The mapping context for flying movement
 	UPROPERTY(EditDefaultsOnly, Category="Input|Maps")
-	UInputMappingContext* FlyingMap;
+	TSoftObjectPtr<UInputMappingContext> FlyingMap;
 
 	// The input action for quitting the game
 	UPROPERTY(EditDefaultsOnly, Category="Input|Settings")
@@ -129,6 +129,12 @@ private:
 	UFUNCTION()
 	void ApplyBoost(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
 		int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
+	/** Gravity Functions */
+	void RotateToGravityDirection();
+
+	UFUNCTION(BlueprintCallable)
+	void AlterGravity(FVector NewGravityDirection);
 
 protected:
 	// Called when the game starts or when spawned
