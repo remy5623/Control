@@ -367,7 +367,7 @@ void AControlCharacter::ApplyBoost(UPrimitiveComponent* OverlappedComp, AActor* 
 
 void AControlCharacter::RotateToGravityDirection()
 {
-	FVector DownVector = (GetActorUpVector() * -1).GetSafeNormal();
+	FVector DownVector = (GetActorUpVector()).GetSafeNormal();
 	FVector GravityVector = GetGravityMovement()->GravityScaleVector.GetSafeNormal();
 
 	if (DownVector != GravityVector)
@@ -375,6 +375,10 @@ void AControlCharacter::RotateToGravityDirection()
 		GetGravityMovement()->Velocity = FVector::ZeroVector;
 		SetActorRotation(FQuat::FindBetween(DownVector, GravityVector * -1).Rotator());
 	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Down Vector: %s"), *DownVector.ToString());
+	UE_LOG(LogTemp, Warning, TEXT("Gravity Vector: %s"), *GravityVector.ToString());
+	UE_LOG(LogTemp, Warning, TEXT("Rotation: %s"), *GetActorRotation().ToString());
 }
 
 void AControlCharacter::AlterGravity(FVector NewGravityDirection)
